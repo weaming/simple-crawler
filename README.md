@@ -10,7 +10,7 @@ class MyCrawler(Crawler):
         print(page.url)
         tags = page.soup.select("#nr1")
         tag = tags and tags[0]
-        with open(name, 'a') as f:
+        with open(self.name, 'a') as f:
             f.write(tag.text)
         print(tag.text)
 
