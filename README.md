@@ -4,6 +4,17 @@
 
 Set environment `AUTO_CHARSET=1` to pass `bytes` to beautifulsoup4 and let it detect the charset.
 
+## Classes
+
+* `URL`: define a URL
+* `URLExt`: object to handle `URL`
+* `Page`: request result of a `URL`
+    * `url`: type `URL`
+    * `content`, `text`, `json`: response content properties from library `requests`
+    * `type`: the response body type, is a enum which allows `BYTES`, `TEXT`, `HTML`, `JSON`
+    * `is_html`: check whether is html accorrding to the response headers's `Content-Type`
+* `Crawler`: schedule the crawler by calling `handler_page()` recusively
+
 ## Example
 
 ```
