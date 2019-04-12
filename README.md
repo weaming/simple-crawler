@@ -1,7 +1,11 @@
+## Install
+
+`pip3 install simple-crawler`
+
 ## Example
 
 ```
-from crawler import *
+from simple_crawler import *
 
 
 class MyCrawler(Crawler):

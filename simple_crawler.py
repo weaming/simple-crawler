@@ -1,13 +1,26 @@
 from typing import List
 import re
+import os
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
 from errors import HTTPError
 
+version = "0.1"
 GET = "GET"
 POST = "POST"
+
+
+class CrawlerException(Exception):
+    pass
+
+
+class HTTPError(CrawlerException):
+    def __init__(self, status, value=None):
+        self.status = status
+        self.value = value
+        super(HTTPError, self).__init__(f"{self.status}: {repr(self.value)[:200]}")
 
 
 def get_url_text(
@@ -17,13 +30,13 @@ def get_url_text(
     json=False,
     binary=False,
     method=GET,
-    include_response=False,
+    include_response=False
 ):
     allowed_methods = [GET, POST]
     assert method in allowed_methods, f"method must in {allowed_methods}"
     res = getattr(requests, method.lower())(url, params=params, data=data)
     err = None if res.status_code == 200 else res.status_code
-    value = res.json() if json else (res.content if binary else res.text)
+    value = res.json() if json else res.content if binary else res.text
     if include_response:
         return err, value, res
     else:
@@ -45,7 +58,6 @@ class URL:
     url: str = None
     params: dict = None
     data: dict = None
-
     # default text
     is_json = False
     is_binary = False
@@ -60,7 +72,7 @@ class URL:
         data=None,
         is_json=False,
         is_binary=False,
-        referer=None,  # type: URL
+        referer=None # type: URL
     ):
         self.method = method
         self.url = url
@@ -79,13 +91,11 @@ class Page:
     content: bytes = None
     text: str = None
     soup: BeautifulSoup = None
-    json = None  # type: list or dict
-    type = str  # enum: BYTES, TEXT, HTML, JSON
+    json = None # type: list or dict
+    type = str # enum: BYTES, TEXT, HTML, JSON
     is_html = False
 
-    url_regexp = re.compile(
-        r"(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]"
-    )
+    url_regexp = re.compile(r"(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]")
 
     def __init__(self, url: URL, value=None, is_html=False):
         self.url = url
@@ -117,11 +127,12 @@ class Page:
         if self.is_html:
             links = self.soup.select("a")
             urls = [
-                x["href"]
-                if x["href"].startswith("http")
-                else urljoin(self.url.url, x["href"])
+                x["href"] if x[
+                    "href"
+                ].startswith("http") else urljoin(self.url.url, x["href"])
                 for x in links
-                if x.has_attr("href") and not x["href"].startswith("javascript")
+                if
+                x.has_attr("href") and not x["href"].startswith("javascript")
             ]
             return [URL(x) for x in urls]
         return []
@@ -135,15 +146,13 @@ class URLExt:
 
     def do_http(self) -> Page:
         url = self.url
-        err, value, res = get_url_text(
-            url.url,
-            params=url.params,
-            data=url.data,
-            json=url.is_json,
-            binary=1,
-            method=url.method,
-            include_response=True,
-        )
+        (
+            err,
+            value,
+            res
+        ) = get_url_text(url.url, params=url.params, data=url.data, json=url.is_json, binary=os.getenv("AUTO_CHARSET")
+        or
+        url.is_binary, method=url.method, include_response=True)
         if err:
             raise HTTPError(err, value)
         is_html = res.headers["content-type"] == "text/html"

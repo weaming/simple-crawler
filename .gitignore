@@ -2,3 +2,6 @@ example*.py
 __pycache__/
 *.py[cod]
 *.txt
+build/
+dist/
+*.egg-info/
