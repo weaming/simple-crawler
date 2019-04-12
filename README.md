@@ -38,3 +38,7 @@ class MyCrawler(Crawler):
 c = MyCrawler("https://xxx.com/xxx")
 c.start()
 ```
+
+## TODO
+
+* [ ] Speed up using async or threading
