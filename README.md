@@ -2,6 +2,8 @@
 
 `pip3 install simple-crawler`
 
+Set environment `AUTO_CHARSET=1` to pass `bytes` to beautifulsoup4 and let it detect the charset.
+
 ## Example
 
 ```
