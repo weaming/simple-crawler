@@ -5,9 +5,8 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
-from errors import HTTPError
 
-version = "0.1"
+version = "0.2"
 GET = "GET"
 POST = "POST"
 
