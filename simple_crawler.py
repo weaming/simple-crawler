@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-version = "0.2"
+version = "0.3"
 GET = "GET"
 POST = "POST"
 
@@ -47,8 +47,6 @@ def html2soup(html, from_encoding=None):
         rv = BeautifulSoup(html, "html.parser", from_encoding=from_encoding)
     else:
         rv = BeautifulSoup(html, "html.parser")
-    charset = rv.select("meta[charset]")
-    print(charset)
     return rv
 
 
