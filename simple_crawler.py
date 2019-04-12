@@ -8,7 +8,7 @@ from urllib.parse import urljoin
 import aiohttp
 from bs4 import BeautifulSoup
 
-version = "1.0"
+version = "1.1"
 GET = "GET"
 POST = "POST"
 
@@ -180,6 +180,7 @@ class Crawler:
         self.loop = loop
 
     async def start(self):
+        await self.page_queue.put(self.start_url)
         U = URLExt(URL(self.start_url))
         P = await U.do_http(self.session)
         await self.handle_page(P)
