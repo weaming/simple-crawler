@@ -1,12 +1,14 @@
 from typing import List
 import re
 import os
+import asyncio
+import logging
 from urllib.parse import urljoin
 
-import requests
+import aiohttp
 from bs4 import BeautifulSoup
 
-version = "0.3"
+version = "1.0"
 GET = "GET"
 POST = "POST"
 
@@ -22,20 +24,25 @@ class HTTPError(CrawlerException):
         super(HTTPError, self).__init__(f"{self.status}: {repr(self.value)[:200]}")
 
 
-def get_url_text(
+async def get_url_text(
     url,
     params=None,
     data=None,
     json=False,
     binary=False,
     method=GET,
-    include_response=False
+    include_response=False,
+    session: aiohttp.ClientSession = None,
 ):
+    session.get
     allowed_methods = [GET, POST]
     assert method in allowed_methods, f"method must in {allowed_methods}"
-    res = getattr(requests, method.lower())(url, params=params, data=data)
-    err = None if res.status_code == 200 else res.status_code
-    value = res.json() if json else res.content if binary else res.text
+    res = await getattr(session, method.lower())(url, params=params, data=data)
+    err = None if res.status == 200 else res.status_code
+
+    value = (
+        await res.json() if json else (await res.read() if binary else await res.text())
+    )
     if include_response:
         return err, value, res
     else:
@@ -69,7 +76,7 @@ class URL:
         data=None,
         is_json=False,
         is_binary=False,
-        referer=None # type: URL
+        referer=None,  # type: URL
     ):
         self.method = method
         self.url = url
@@ -88,11 +95,13 @@ class Page:
     content: bytes = None
     text: str = None
     soup: BeautifulSoup = None
-    json = None # type: list or dict
-    type = str # enum: BYTES, TEXT, HTML, JSON
+    json = None  # type: list or dict
+    type = str  # enum: BYTES, TEXT, HTML, JSON
     is_html = False
 
-    url_regexp = re.compile(r"(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]")
+    url_regexp = re.compile(
+        r"(https?|ftp|file)://[-A-Za-z0-9\+&@#/%?=~_|!:,.;]*[-A-Za-z0-9\+&@#/%=~_|]"
+    )
 
     def __init__(self, url: URL, value=None, is_html=False):
         self.url = url
@@ -124,12 +133,11 @@ class Page:
         if self.is_html:
             links = self.soup.select("a")
             urls = [
-                x["href"] if x[
-                    "href"
-                ].startswith("http") else urljoin(self.url.url, x["href"])
+                x["href"]
+                if x["href"].startswith("http")
+                else urljoin(self.url.url, x["href"])
                 for x in links
-                if
-                x.has_attr("href") and not x["href"].startswith("javascript")
+                if x.has_attr("href") and not x["href"].startswith("javascript")
             ]
             return [URL(x) for x in urls]
         return []
@@ -141,15 +149,18 @@ class URLExt:
     def __init__(self, url: URL):
         self.url = url
 
-    def do_http(self) -> Page:
+    async def do_http(self, session: aiohttp.ClientSession) -> Page:
         url = self.url
-        (
-            err,
-            value,
-            res
-        ) = get_url_text(url.url, params=url.params, data=url.data, json=url.is_json, binary=os.getenv("AUTO_CHARSET")
-        or
-        url.is_binary, method=url.method, include_response=True)
+        (err, value, res) = await get_url_text(
+            url.url,
+            params=url.params,
+            data=url.data,
+            json=url.is_json,
+            binary=os.getenv("AUTO_CHARSET") or url.is_binary,
+            method=url.method,
+            include_response=True,
+            session=session,
+        )
         if err:
             raise HTTPError(err, value)
         is_html = res.headers["content-type"] == "text/html"
@@ -158,24 +169,76 @@ class URLExt:
 
 
 class Crawler:
-    def __init__(self, start_url):
+    def __init__(self, start_url, loop, concurrency=10):
         self.start_url = start_url
         self.seen = set()
 
-    def start(self):
+        self.page_queue = asyncio.Queue()
+        self.session = aiohttp.ClientSession()
+
+        self.concurrency = concurrency
+        self.loop = loop
+
+    async def start(self):
         U = URLExt(URL(self.start_url))
-        P = U.do_http()
-        self.handler_page(P)
+        P = await U.do_http(self.session)
+        await self.handle_page(P)
+
+        workers = [
+            self.loop.create_task(self.worker(i)) for i in range(self.concurrency)
+        ]
+        await self.page_queue.join()
+        for w in workers:
+            w.cancel()
+        await self.close()
 
     def filter_url(self, url: URL) -> bool:
         return True
 
-    def custom_handler_page(self, page):
+    def custom_handle_page(self, page):
         pass
 
-    def handler_page(self, page):
-        self.custom_handler_page(page)
+    async def async_custom_handle_page(self, page):
+        pass
+
+    async def worker(self, id):
+        logging.debug(f"starting worker {id}")
+        try:
+            while True:
+                page = await self.page_queue.get()
+                await self.handle_page(page)
+                self.page_queue.task_done()
+        except asyncio.CancelledError:
+            pass
+
+    async def handle_page(self, page):
+        await self.custom_handle_page(page)
         for _U in filter(self.filter_url, page.get_next_urls()):
             if _U.url not in self.seen:
                 self.seen.add(_U.url)
-                self.handler_page(URLExt(_U).do_http())
+                await self.page_queue.put(await URLExt(_U).do_http(self.session))
+
+    async def close(self):
+        await self.session.close()
+
+
+# async event loop
+
+
+def get_event_loop(not_running=False):
+    try:
+        loop = asyncio.get_event_loop()
+        if not_running and loop.is_running():
+            return asyncio.new_event_loop()
+    except Exception as e:
+        logging.warning(f"exception in get_event_loop: {e}, will create new one")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop
+
+
+def schedule_future_in_loop(future, loop=None):
+    if not loop:
+        loop = get_event_loop(not_running=True)
+    result = loop.run_until_complete(future)
+    return result

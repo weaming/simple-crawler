@@ -24,22 +24,23 @@ from simple_crawler import *
 
 class MyCrawler(Crawler):
     name = 'output.txt'
-    def custom_handler_page(self, page):
+    aysnc def custom_handle_page(self, page):
         print(page.url)
-        tags = page.soup.select("#nr1")
+        tags = page.soup.select("#container")
         tag = tags and tags[0]
         with open(self.name, 'a') as f:
             f.write(tag.text)
-        print(tag.text)
+        # do some async call
 
     def filter_url(self, url: URL) -> bool:
         return url.url.startswith("https://xxx.com/xxx")
 
 
-c = MyCrawler("https://xxx.com/xxx")
-c.start()
+loop = get_event_loop(True)
+c = MyCrawler("https://xxx.com/xxx", loop, concurrency=10)
+schedule_future_in_loop(c.start(), loop=loop)
 ```
 
 ## TODO
 
-* [ ] Speed up using async or threading
+* [x] Speed up using async or threading
